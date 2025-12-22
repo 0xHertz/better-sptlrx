@@ -9,6 +9,53 @@
 
 </div>
 
+
+
+## do better
+
+* fix `sptlrx pipe` output empty line
+
+* fix local lyrics parse bug, accept `.lrc` metadata
+
+  ```lrc
+  [id:66261]
+  [ti:烂]
+  [ar:陈奕迅]
+  [al:U-87]
+  [by:8407876@网易云音乐]
+  [00:00.00]作曲 : C. Y. Kong
+  [00:01.00]编曲 : C. Y. Kong
+  ```
+
+  ```go
+  func parseLrcFile(reader io.Reader) []lyrics.Line {
+  	result := []lyrics.Line{}
+  	scanner := bufio.NewScanner(reader)
+  
+  	for scanner.Scan() {
+  		line := scanner.Text()
+  
+  		// 只接受真正的时间戳行
+  		if !lrcTimeLine.MatchString(line) {
+  			continue
+  		}
+  
+  		l := parseLrcLine(line)
+  
+  		// 过滤只有时间、没有文字的行
+  		if strings.TrimSpace(l.Words) == "" {
+  			continue
+  		}
+  
+  		result = append(result, l)
+  	}
+  
+  	return result
+  }
+  ```
+
+  
+
 ## Features
 
 - Compatible with Spotify, MPD, Mopidy, MPRIS and browsers.
