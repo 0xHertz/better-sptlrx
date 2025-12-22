@@ -3,14 +3,15 @@ package local
 import (
 	"bufio"
 	"fmt"
-	"github.com/raitonoberu/sptlrx/lyrics"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
-	"regexp"
+
+	"github.com/raitonoberu/sptlrx/lyrics"
 )
 
 var replacer = strings.NewReplacer(

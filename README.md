@@ -13,6 +13,10 @@
 
 ## do better
 
+* 搭配[Lyrics-On-Top](https://github.com/0xHertz/Lyrics-On-Top)使用，实现歌词在topbar上显示
+
+  ![image-20251223074837650](https://raw.githubusercontent.com/0xHertz/img/main/imgimage-20251223074837650.png)
+
 * fix `sptlrx pipe` output empty line
 
 * fix local lyrics parse bug, accept `.lrc` metadata
