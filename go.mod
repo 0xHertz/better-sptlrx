@@ -12,6 +12,7 @@ require (
 	github.com/creasty/defaults v1.8.0
 	github.com/fhs/gompd v1.0.1
 	github.com/godbus/dbus/v5 v5.1.1-0.20230522191255-76236955d466
+	github.com/longbridgeapp/opencc v0.3.13
 	github.com/muesli/reflow v0.3.0
 	github.com/raitonoberu/lyricsapi v0.0.0-20250321181912-2e8c45d10c8e
 	github.com/spf13/cobra v1.9.1
@@ -28,6 +29,8 @@ require (
 	github.com/charmbracelet/x/term v0.2.1 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/liuzl/cedar-go v0.0.0-20170805034717-80a9c64b256d // indirect
+	github.com/liuzl/da v0.0.0-20180704015230-14771aad5b1d // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect

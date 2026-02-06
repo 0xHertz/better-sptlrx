@@ -11,8 +11,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/longbridgeapp/opencc"
 	"github.com/raitonoberu/sptlrx/lyrics"
 )
+
+var t2sConverter *opencc.OpenCC
 
 var replacer = strings.NewReplacer(
 	"_", " ", "-", " ", ",", "", ".", "", "!", "", "?", "",
@@ -21,12 +24,21 @@ var replacer = strings.NewReplacer(
 var lrcTimeLine = regexp.MustCompile(`^\[\d{2}:\d{2}\.\d{2}\]`)
 
 type file struct {
-	Path       string
-	NameParts  []string
-	TitleParts []string // 新增，用于ti标签匹配
+	Path            string
+	NameParts       []string
+	NamePartsSimp   []string // 简体
+	TitleParts      []string // 用于ti标签匹配
+	TitlePartsSimp  []string // 简体
+	ArtistParts     []string // 用于ar标签匹配
+	ArtistPartsSimp []string // 简体
 }
 
 func New(folder string) (*Client, error) {
+	var err error
+	t2sConverter, err = opencc.New("t2s")
+	if err != nil {
+		return nil, err
+	}
 	index, err := createIndex(folder)
 	if err != nil {
 		return nil, err
@@ -55,41 +67,105 @@ func (c *Client) Lyrics(id, query string) ([]lyrics.Line, error) {
 }
 
 func (c *Client) findFile(query string) *file {
-	parts := splitString(query)
-	var best *file
-	var maxScore int
+	parts := splitString(query, true)
+	partsSimp := toSimplifiedSlice(parts)
+
+	var singerParts, singerPartsSimp, titleParts, titlePartsSimp []string
+	if len(parts) > 1 {
+		singerParts = []string{parts[0]}
+		singerPartsSimp = []string{partsSimp[0]}
+		titleParts = parts[1:]
+		titlePartsSimp = partsSimp[1:]
+	} else {
+		titleParts = parts
+		titlePartsSimp = partsSimp
+	}
+
+	type matchResult struct {
+		file        *file
+		titleScore  int
+		singerScore int
+	}
+
+	var results []matchResult
 
 	for _, f := range c.index {
-		score := 0
+		titleScore := 0
+		singerScore := 0
 
-		// 先匹配 ti 标签
-		for _, part := range parts {
+		// 歌名匹配 ti 标签和文件名
+		for _, part := range titleParts {
 			for _, titlePart := range f.TitleParts {
 				if strings.Contains(titlePart, part) {
-					score++
+					titleScore++
+					break
+				}
+			}
+			for _, namePart := range f.NameParts {
+				if strings.Contains(namePart, part) {
+					titleScore++
+					break
+				}
+			}
+		}
+		for _, part := range titlePartsSimp {
+			for _, titlePart := range f.TitlePartsSimp {
+				if strings.Contains(titlePart, part) {
+					titleScore++
+					break
+				}
+			}
+			for _, namePart := range f.NamePartsSimp {
+				if strings.Contains(namePart, part) {
+					titleScore++
 					break
 				}
 			}
 		}
 
-		// 如果 ti 匹配不到，再用文件名兜底
-		if score == 0 {
-			for _, part := range parts {
-				for _, namePart := range f.NameParts {
-					if strings.Contains(namePart, part) {
-						score++
-						break
-					}
+		// 歌手名匹配 ar 标签和文件名
+		for _, part := range singerParts {
+			for _, artistPart := range f.ArtistParts {
+				if strings.Contains(artistPart, part) {
+					singerScore++
+					break
+				}
+			}
+			for _, namePart := range f.NameParts {
+				if strings.Contains(namePart, part) {
+					singerScore++
+					break
+				}
+			}
+		}
+		for _, part := range singerPartsSimp {
+			for _, artistPart := range f.ArtistPartsSimp {
+				if strings.Contains(artistPart, part) {
+					singerScore++
+					break
+				}
+			}
+			for _, namePart := range f.NamePartsSimp {
+				if strings.Contains(namePart, part) {
+					singerScore++
+					break
 				}
 			}
 		}
 
-		if score > maxScore {
-			maxScore = score
-			best = f
-			if score >= len(parts) {
-				break // 完全匹配，提前返回
-			}
+		results = append(results, matchResult{file: f, titleScore: titleScore, singerScore: singerScore})
+	}
+
+	// 先按歌名得分排序，歌名得分相同再按歌手得分排序
+	var best *file
+	maxTitleScore := -1
+	maxSingerScore := -1
+	for _, r := range results {
+		if r.titleScore > maxTitleScore ||
+			(r.titleScore == maxTitleScore && r.singerScore > maxSingerScore) {
+			best = r.file
+			maxTitleScore = r.titleScore
+			maxSingerScore = r.singerScore
 		}
 	}
 
@@ -112,10 +188,14 @@ func createIndex(folder string) ([]*file, error) {
 		}
 
 		name := strings.TrimSuffix(d.Name(), ".lrc")
-		nameParts := splitString(name)
+		nameParts := splitString(name, false)
+		namePartsSimp := toSimplifiedSlice(nameParts)
 
 		titleParts := []string{}
-		// 读取文件前几行，找 [ti:...] 标签
+		titlePartsSimp := []string{}
+		artistParts := []string{}
+		artistPartsSimp := []string{}
+		// 读取文件前几行，找 [ti:...] 和 [ar:...] 标签
 		fhandle, err := os.Open(path)
 		if err == nil {
 			scanner := bufio.NewScanner(fhandle)
@@ -123,17 +203,26 @@ func createIndex(folder string) ([]*file, error) {
 				line := scanner.Text()
 				if strings.HasPrefix(line, "[ti:") && strings.HasSuffix(line, "]") {
 					ti := line[4 : len(line)-1]
-					titleParts = splitString(ti)
-					break
+					titleParts = splitString(ti, false)
+					titlePartsSimp = toSimplifiedSlice(titleParts)
+				}
+				if strings.HasPrefix(line, "[ar:") && strings.HasSuffix(line, "]") {
+					ar := line[4 : len(line)-1]
+					artistParts = splitString(ar, false)
+					artistPartsSimp = toSimplifiedSlice(artistParts)
 				}
 			}
 			fhandle.Close()
 		}
 
 		index = append(index, &file{
-			Path:       path,
-			NameParts:  nameParts,
-			TitleParts: titleParts,
+			Path:            path,
+			NameParts:       nameParts,
+			NamePartsSimp:   namePartsSimp,
+			TitleParts:      titleParts,
+			TitlePartsSimp:  titlePartsSimp,
+			ArtistParts:     artistParts,
+			ArtistPartsSimp: artistPartsSimp,
 		})
 		return nil
 	})
@@ -141,10 +230,25 @@ func createIndex(folder string) ([]*file, error) {
 	return index, err
 }
 
-func splitString(s string) []string {
+func splitString(s string, isQuery bool) []string {
 	s = strings.ToLower(s)
 	s = replacer.Replace(s)
 	return strings.Fields(s)
+}
+
+func toSimplifiedSlice(src []string) []string {
+	if t2sConverter == nil {
+		return src
+	}
+	dst := make([]string, 0, len(src))
+	for _, s := range src {
+		if converted, err := t2sConverter.Convert(s); err == nil {
+			dst = append(dst, converted)
+		} else {
+			dst = append(dst, s)
+		}
+	}
+	return dst
 }
 
 func parseLrcFile(reader io.Reader) []lyrics.Line {
